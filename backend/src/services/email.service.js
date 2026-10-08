@@ -1,4 +1,7 @@
+const dns = require("node:dns");
 const nodemailer = require("nodemailer");
+
+dns.setDefaultResultOrder("ipv4first");
 
 let transporter = null;
 
@@ -34,20 +37,24 @@ function getTransporter() {
     secure: port === 465,
   });
 
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port,
-    secure: port === 465,
+transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port,
+  secure: port === 465,
 
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASSWORD,
-    },
+  // Render hiện không kết nối được Gmail qua IPv6.
+  // Ép SMTP sử dụng IPv4.
+  family: 4,
 
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASSWORD,
+  },
+
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
+});
 
   return transporter;
 }
