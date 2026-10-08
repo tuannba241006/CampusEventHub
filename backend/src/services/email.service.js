@@ -1,70 +1,13 @@
-const dns = require("node:dns");
-const nodemailer = require("nodemailer");
-
-dns.setDefaultResultOrder("ipv4first");
-
-let transporter = null;
-
-function getTransporter() {
-  if (transporter) {
-    return transporter;
-  }
-
-  const {
-    SMTP_HOST,
-    SMTP_PORT,
-    SMTP_USER,
-    SMTP_PASSWORD,
-  } = process.env;
-
-  if (
-    !SMTP_HOST ||
-    !SMTP_PORT ||
-    !SMTP_USER ||
-    !SMTP_PASSWORD
-  ) {
-    throw new Error(
-      "Thiếu cấu hình SMTP trong environment variables"
-    );
-  }
-
-  const port = Number(SMTP_PORT);
-
-  console.log("[SMTP] Creating transporter", {
-    host: SMTP_HOST,
-    port,
-    user: SMTP_USER,
-    secure: port === 465,
-  });
-
-transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port,
-  secure: port === 465,
-
-  // Render hiện không kết nối được Gmail qua IPv6.
-  // Ép SMTP sử dụng IPv4.
-  family: 4,
-
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASSWORD,
-  },
-
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
-
-  return transporter;
-}
-
 async function sendPasswordResetOtp(email, otp) {
-  const deliveryMode =
-    process.env.OTP_DELIVERY_MODE || "console";
+  const deliveryMode = (
+    process.env.OTP_DELIVERY_MODE || "console"
+  )
+    .trim()
+    .toLowerCase();
 
   console.log("[OTP] Delivery mode:", deliveryMode);
 
+  // Development / demo mode
   if (deliveryMode === "console") {
     console.log(
       `[DEV OTP] Password reset OTP for ${email}: ${otp}`
@@ -72,48 +15,124 @@ async function sendPasswordResetOtp(email, otp) {
     return;
   }
 
-  const mailTransporter = getTransporter();
+  if (deliveryMode !== "api") {
+    throw new Error(
+      `OTP_DELIVERY_MODE không hợp lệ: ${deliveryMode}`
+    );
+  }
+
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.EMAIL_FROM;
+  const senderName =
+    process.env.EMAIL_FROM_NAME || "Campus Event Hub";
+
+  if (!apiKey || !senderEmail) {
+    throw new Error(
+      "Thiếu BREVO_API_KEY hoặc EMAIL_FROM"
+    );
+  }
+
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 10000);
 
   try {
-    console.log("[SMTP] Verifying connection...");
+    console.log(
+      "[EMAIL API] Sending OTP to:",
+      email
+    );
 
-    await mailTransporter.verify();
+    const response = await fetch(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        method: "POST",
 
-    console.log("[SMTP] Connection verified");
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          "api-key": apiKey,
+        },
 
-    console.log("[SMTP] Sending OTP email to:", email);
+        body: JSON.stringify({
+          sender: {
+            name: senderName,
+            email: senderEmail,
+          },
 
-    const info = await mailTransporter.sendMail({
-      from:
-        process.env.SMTP_FROM ||
-        process.env.SMTP_USER,
+          to: [
+            {
+              email,
+            },
+          ],
 
-      to: email,
+          subject:
+            "Campus Event Hub - Mã OTP đặt lại mật khẩu",
 
-      subject:
-        "Campus Event Hub - Mã OTP đặt lại mật khẩu",
+          htmlContent: `
+            <div
+              style="
+                font-family: Arial, sans-serif;
+                max-width: 520px;
+                margin: 0 auto;
+              "
+            >
+              <h2 style="color: #4f46e5;">
+                Campus Event Hub
+              </h2>
 
-      text:
-        `Mã OTP đặt lại mật khẩu của bạn là: ${otp}. ` +
-        `Mã có hiệu lực trong 10 phút. ` +
-        `Nếu bạn không yêu cầu đặt lại mật khẩu, hãy bỏ qua email này.`,
-    });
+              <p>
+                Mã OTP đặt lại mật khẩu của bạn là:
+              </p>
+
+              <div
+                style="
+                  font-size: 32px;
+                  font-weight: bold;
+                  letter-spacing: 8px;
+                  margin: 24px 0;
+                "
+              >
+                ${otp}
+              </div>
+
+              <p>
+                Mã có hiệu lực trong 10 phút.
+              </p>
+
+              <p>
+                Nếu bạn không yêu cầu đặt lại mật khẩu,
+                hãy bỏ qua email này.
+              </p>
+            </div>
+          `,
+        }),
+
+        signal: controller.signal,
+      }
+    );
+
+    const body = await response.text();
+
+    if (!response.ok) {
+      throw new Error(
+        `Email API ${response.status}: ${body}`
+      );
+    }
 
     console.log(
-      "[SMTP] OTP email sent:",
-      info.messageId
+      "[EMAIL API] OTP sent successfully"
     );
   } catch (error) {
-    console.error("[SMTP] SEND ERROR:", {
+    console.error("[EMAIL API] SEND ERROR:", {
+      name: error.name,
       message: error.message,
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode,
-      stack: error.stack,
     });
 
     throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
