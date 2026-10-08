@@ -70,9 +70,9 @@ async function sendEventRemindersForDate(
       'da_xoa',
       false
     )
-    .neq(
+    .in(
       'trang_thai_su_kien',
-      'DaKetThuc'
+      ['SapToChuc', 'DangDienRa']
     );
 
   if (eventError) {
