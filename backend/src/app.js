@@ -28,6 +28,13 @@ const {
 
 const app = express();
 
+// Render chạy Express phía sau reverse proxy.
+// Cần trust proxy để req.ip và express-rate-limit
+// đọc X-Forwarded-For chính xác.
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // ==============================
 // Global Middleware
 // ==============================

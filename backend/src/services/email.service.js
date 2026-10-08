@@ -27,6 +27,13 @@ function getTransporter() {
 
   const port = Number(SMTP_PORT);
 
+  console.log("[SMTP] Creating transporter", {
+    host: SMTP_HOST,
+    port,
+    user: SMTP_USER,
+    secure: port === 465,
+  });
+
   transporter = nodemailer.createTransport({
     host: SMTP_HOST,
     port,
@@ -36,6 +43,10 @@ function getTransporter() {
       user: SMTP_USER,
       pass: SMTP_PASSWORD,
     },
+
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
   return transporter;
@@ -44,6 +55,8 @@ function getTransporter() {
 async function sendPasswordResetOtp(email, otp) {
   const deliveryMode =
     process.env.OTP_DELIVERY_MODE || "console";
+
+  console.log("[OTP] Delivery mode:", deliveryMode);
 
   if (deliveryMode === "console") {
     console.log(
@@ -55,6 +68,14 @@ async function sendPasswordResetOtp(email, otp) {
   const mailTransporter = getTransporter();
 
   try {
+    console.log("[SMTP] Verifying connection...");
+
+    await mailTransporter.verify();
+
+    console.log("[SMTP] Connection verified");
+
+    console.log("[SMTP] Sending OTP email to:", email);
+
     const info = await mailTransporter.sendMail({
       from:
         process.env.SMTP_FROM ||
@@ -72,16 +93,17 @@ async function sendPasswordResetOtp(email, otp) {
     });
 
     console.log(
-      "OTP email sent:",
+      "[SMTP] OTP email sent:",
       info.messageId
     );
   } catch (error) {
-    console.error("SMTP SEND ERROR:", {
+    console.error("[SMTP] SEND ERROR:", {
       message: error.message,
       code: error.code,
       command: error.command,
       response: error.response,
       responseCode: error.responseCode,
+      stack: error.stack,
     });
 
     throw error;

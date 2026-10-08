@@ -144,37 +144,51 @@ async function listAssignedEventsForOrganizer(accountId, now = new Date()) {
   return sortAssignedEvents(data || []).map((event) => mapAssignedEvent(event, now));
 }
 
-async function getAssignedEvents(user, options = {}) {
+async function getAssignedEvents(
+  user,
+  options = {}
+) {
   if (!user?.id) {
-    const error = new Error("Bạn chưa đăng nhập");
+    const error = new Error(
+      "Bạn chưa đăng nhập"
+    );
     error.code = "UNAUTHORIZED";
     throw error;
   }
 
-  const actorId = toPositiveInteger(user.id);
+  const actorId =
+    toPositiveInteger(user.id);
+
   if (!actorId) {
-    const error = new Error("Tài khoản không hợp lệ");
+    const error = new Error(
+      "Tài khoản không hợp lệ"
+    );
     error.code = "UNAUTHORIZED";
     throw error;
   }
 
-  if (user.role === "NhanVienCheckIn" || user.role === "SinhVien" || user.role === "ToChuc") {
-    const staffEvents = await listAssignedEventsForStaff(actorId, options.now);
-    const organizerEvents = await listAssignedEventsForOrganizer(actorId, options.now);
-    
-    const combined = [...staffEvents, ...organizerEvents];
-    const unique = [];
-    const seen = new Set();
-    for (const event of combined) {
-      if (!seen.has(event.ma_su_kien)) {
-        seen.add(event.ma_su_kien);
-        unique.push(event);
-      }
-    }
-    return unique;
+  // Nhân viên check-in:
+  // chỉ xem các sự kiện được phân công.
+  if (user.role === "NhanVienCheckIn") {
+    return listAssignedEventsForStaff(
+      actorId,
+      options.now
+    );
   }
 
-  const error = new Error("Bạn không có quyền soát vé");
+  // Ban tổ chức:
+  // chỉ xem các sự kiện do mình tổ chức.
+  if (user.role === "ToChuc") {
+    return listAssignedEventsForOrganizer(
+      actorId,
+      options.now
+    );
+  }
+
+  // SinhVien và mọi role khác không có quyền.
+  const error = new Error(
+    "Bạn không có quyền soát vé"
+  );
   error.code = "FORBIDDEN";
   throw error;
 }
