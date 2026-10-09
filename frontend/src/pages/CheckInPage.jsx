@@ -397,14 +397,16 @@ export default function CheckInPage() {
                   type="button"
                   onClick={startCamera}
                   className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#090912] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!selectedEventId || cameraStarting}
+                  disabled={!selectedEventId || cameraStarting || !selectedEvent?.canScan}
                 >
                   {cameraStarting ? "Đang mở camera..." : "Mở camera"}
                 </button>
                 <p className="text-xs text-slate-500">
                   {cameraError ||
                     (selectedEventId
-                      ? "Sử dụng camera sau để quét mã QR"
+                      ? selectedEvent?.canScan
+                        ? "Sử dụng camera sau để quét mã QR"
+                        : "Sự kiện hiện chưa mở check-in hoặc đã kết thúc"
                       : "Vui lòng chọn sự kiện để mở camera")}
                 </p>
               </div>
@@ -446,12 +448,13 @@ export default function CheckInPage() {
                 onChange={(event) => setManualCode(event.target.value)}
                 placeholder="VD: TKT-2026-003412"
                 autoComplete="off"
-                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30"
+                disabled={!selectedEvent?.canScan}
+                className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30 disabled:opacity-50 disabled:cursor-not-allowed"
               />
 
               <button
                 type="submit"
-                disabled={!manualCode.trim() || !selectedEventId || scanSubmitting}
+                disabled={!manualCode.trim() || !selectedEventId || scanSubmitting || !selectedEvent?.canScan}
                 className="shrink-0 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f0f1a] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {scanSubmitting ? "Đang xác nhận..." : "Xác nhận"}

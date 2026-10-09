@@ -46,7 +46,23 @@ const getOrganizerEvents = async (req, res, next) => {
 
 const getPublicEvents = async (req, res, next) => {
   try {
-    const { keyword, ma_chuyen_de, trang_thai_su_kien, ticketStatus, ngay_dien_ra, dia_diem, page, limit } = req.query;
+    const { keyword, ma_chuyen_de, trang_thai_su_kien, ticketStatus, ngay_dien_ra, dia_diem, page, limit, sortBy } = req.query;
+
+    let maTaiKhoan = null;
+    if (req.user?.id) {
+      maTaiKhoan = req.user.id;
+    } else {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          maTaiKhoan = decoded.sub || decoded.id || decoded.ma_tai_khoan;
+        } catch (e) {}
+      }
+    }
+
     const result = await eventService.getPublicEventsService({
       keyword,
       ma_chuyen_de: ma_chuyen_de ? Number(ma_chuyen_de) : undefined,
@@ -55,7 +71,9 @@ const getPublicEvents = async (req, res, next) => {
       ngay_dien_ra,
       dia_diem,
       page: page ? Number(page) : 1,
-      limit: limit ? Number(limit) : 9
+      limit: limit ? Number(limit) : 9,
+      sortBy,
+      maTaiKhoan
     });
 
     return res.status(200).json({

@@ -93,6 +93,7 @@ function AppRouter() {
             <ProtectedRoute
               allowedRoles={[
                 "SinhVien",
+                "NhanVienCheckIn",
               ]}
             >
               <TicketPage />
@@ -106,6 +107,7 @@ function AppRouter() {
             <ProtectedRoute
               allowedRoles={[
                 "SinhVien",
+                "NhanVienCheckIn",
               ]}
             >
               <TicketConfirmPage />

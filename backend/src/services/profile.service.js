@@ -32,6 +32,18 @@ async function getProfileById(accountId) {
     throw error;
   }
 
+  // Cập nhật lại role nếu được phân công check-in
+  if (data.loai_tai_khoan === "SinhVien") {
+    const { count } = await supabase
+      .from("nhan_vien_check_in")
+      .select("*", { count: "exact", head: true })
+      .eq("ma_tai_khoan", accountId)
+      .eq("da_xoa", false);
+    if (count > 0) {
+      data.loai_tai_khoan = "NhanVienCheckIn";
+    }
+  }
+
   return data;
 }
 
@@ -49,6 +61,17 @@ async function updateProfile(accountId, updateData) {
 
   if (error) {
     throw error;
+  }
+
+  if (data.loai_tai_khoan === "SinhVien") {
+    const { count } = await supabase
+      .from("nhan_vien_check_in")
+      .select("*", { count: "exact", head: true })
+      .eq("ma_tai_khoan", accountId)
+      .eq("da_xoa", false);
+    if (count > 0) {
+      data.loai_tai_khoan = "NhanVienCheckIn";
+    }
   }
 
   return data;

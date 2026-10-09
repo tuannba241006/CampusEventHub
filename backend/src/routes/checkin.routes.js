@@ -8,21 +8,21 @@ const router = express.Router();
 router.get(
   "/assigned-events",
   authenticate,
-  authorizeRoles("NhanVienCheckIn", "ToChuc"),
+  authorizeRoles("SinhVien", "NhanVienCheckIn", "ToChuc"),
   checkinController.getAssignedEvents
 );
 
 router.post(
   "/scan",
   authenticate,
-  authorizeRoles("NhanVienCheckIn", "ToChuc"),
+  authorizeRoles("SinhVien", "NhanVienCheckIn", "ToChuc"),
   checkinController.scan
 );
 
 router.get(
   "/history",
   authenticate,
-  authorizeRoles("NhanVienCheckIn", "ToChuc"),
+  authorizeRoles("SinhVien", "NhanVienCheckIn", "ToChuc"),
   checkinController.getHistory
 );
 

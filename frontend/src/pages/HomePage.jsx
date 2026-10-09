@@ -37,7 +37,7 @@ export default function HomePage() {
   const userName = displayUser?.ho_ten || displayUser?.name || 'Khách';
   const userInitials = userName.split(' ').map(n => n[0]).join('').slice(-2).toUpperCase();
 
-  const fetchEvents = async (querySearch, queryTopic, queryTicket, queryDate, queryLocation, queryPage) => {
+  const fetchEvents = async (querySearch, queryTopic, queryTicket, queryDate, queryLocation, querySort, queryPage) => {
     setLoading(true);
     try {
       const params = { page: queryPage, limit: 9 };
@@ -46,6 +46,7 @@ export default function HomePage() {
       if (queryTicket !== 'all') params.ticketStatus = queryTicket;
       if (queryDate) params.ngay_dien_ra = queryDate;
       if (queryLocation) params.dia_diem = queryLocation;
+      if (querySort) params.sortBy = querySort;
 
       const res = await getPublicEvents(params);
       if (res.success) {
@@ -70,7 +71,7 @@ export default function HomePage() {
     
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => {
-      fetchEvents(value, topic, ticketStatus, date, location, 1);
+      fetchEvents(value, topic, ticketStatus, date, location, sortBy, 1);
     }, 500);
   };
 
@@ -78,14 +79,14 @@ export default function HomePage() {
     const newTopic = topic === t ? 'all' : t;
     setTopic(newTopic);
     setPage(1);
-    fetchEvents(search, newTopic, ticketStatus, date, location, 1);
+    fetchEvents(search, newTopic, ticketStatus, date, location, sortBy, 1);
   };
 
   const handleTicketStatusChange = (st) => {
     const newSt = ticketStatus === st ? 'all' : st;
     setTicketStatus(newSt);
     setPage(1);
-    fetchEvents(search, topic, newSt, date, location, 1);
+    fetchEvents(search, topic, newSt, date, location, sortBy, 1);
   };
 
   const applyModalFilters = () => {
@@ -95,7 +96,7 @@ export default function HomePage() {
     setLocation(modalLocation);
     setShowFilterModal(false);
     setPage(1);
-    fetchEvents(search, modalTopic, modalTicket, modalDate, modalLocation, 1);
+    fetchEvents(search, modalTopic, modalTicket, modalDate, modalLocation, sortBy, 1);
   };
 
   const clearModalFilters = () => {
@@ -110,13 +111,13 @@ export default function HomePage() {
     setLocation('');
     setShowFilterModal(false);
     setPage(1);
-    fetchEvents(search, 'all', 'all', '', '', 1);
+    fetchEvents(search, 'all', 'all', '', '', sortBy, 1);
   };
 
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    fetchEvents(search, topic, ticketStatus, date, location, nextPage);
+    fetchEvents(search, topic, ticketStatus, date, location, sortBy, nextPage);
   };
 
   const fetchNotifs = async () => {
@@ -132,7 +133,7 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchEvents(search, topic, ticketStatus, date, location, 1);
+    fetchEvents(search, topic, ticketStatus, date, location, sortBy, 1);
     fetchNotifs();
     fetchCategories().then(res => {
       if(res.success) setCategories(res.data);
@@ -142,6 +143,12 @@ export default function HomePage() {
   
   // Helper to get status pill styling
   const getTicketStatusBadge = (event) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDate = new Date(event.ngay_dien_ra);
+    const isPast = eventDate < today || event.trang_thai_su_kien === 'DaKetThuc';
+
+    if (isPast) return { label: 'Đã kết thúc', bg: 'bg-slate-200', text: 'text-slate-600' };
     if (event.so_ve_con_lai <= 0) return { label: 'Hết chỗ', bg: 'bg-rose-100', text: 'text-rose-600' };
     if (event.so_ve_con_lai <= event.so_luong_toi_da * 0.2) return { label: 'Sắp hết', bg: 'bg-amber-100', text: 'text-amber-700' };
     return { label: 'Còn chỗ', bg: 'bg-emerald-100', text: 'text-emerald-700' };
@@ -186,11 +193,17 @@ export default function HomePage() {
             <div className="flex gap-2">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSortBy(val);
+                  setPage(1);
+                  fetchEvents(search, topic, ticketStatus, date, location, val, 1);
+                }}
                 className="px-3 py-2.5 border border-slate-200 rounded-xl bg-white text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-colors outline-none cursor-pointer"
               >
                 <option value="date_asc">Sắp diễn ra</option>
-                <option value="date_desc">Xa nhất</option>
+                <option value="date_latest">Thời gian diễn ra trễ nhất</option>
+                <option value="date_earliest">Thời gian diễn ra sớm nhất</option>
                 <option value="name_asc">Tên (A-Z)</option>
                 <option value="name_desc">Tên (Z-A)</option>
               </select>
@@ -248,8 +261,20 @@ export default function HomePage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {[...events].sort((a, b) => {
-                if (sortBy === 'date_asc') return new Date(a.ngay_dien_ra) - new Date(b.ngay_dien_ra);
-                if (sortBy === 'date_desc') return new Date(b.ngay_dien_ra) - new Date(a.ngay_dien_ra);
+                if (sortBy === 'date_asc') {
+                  const now = new Date();
+                  now.setHours(0, 0, 0, 0);
+                  const dateA = new Date(a.ngay_dien_ra);
+                  const dateB = new Date(b.ngay_dien_ra);
+                  const isPastA = dateA < now;
+                  const isPastB = dateB < now;
+                  
+                  if (isPastA && !isPastB) return 1; // Sự kiện A đã qua, B chưa qua -> B lên trước
+                  if (!isPastA && isPastB) return -1; // Sự kiện A chưa qua, B đã qua -> A lên trước
+                  return dateA - dateB; // Nếu cùng qua hoặc cùng chưa qua thì xếp tăng dần
+                }
+                if (sortBy === 'date_latest' || sortBy === 'date_desc') return new Date(b.ngay_dien_ra) - new Date(a.ngay_dien_ra);
+                if (sortBy === 'date_earliest') return new Date(a.ngay_dien_ra) - new Date(b.ngay_dien_ra);
                 if (sortBy === 'name_asc') return (a.ten_su_kien || '').localeCompare(b.ten_su_kien || '');
                 if (sortBy === 'name_desc') return (b.ten_su_kien || '').localeCompare(a.ten_su_kien || '');
                 return 0;
@@ -259,6 +284,11 @@ export default function HomePage() {
                 const topicName = event.chuyen_de?.ten_chuyen_de || 'Chuyên đề';
                 const statusBadge = getTicketStatusBadge(event);
                 const isFull = event.so_ve_con_lai <= 0;
+
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const eventDate = new Date(event.ngay_dien_ra);
+                const isPast = eventDate < today || event.trang_thai_su_kien === 'DaKetThuc';
                 
                 const pct = event.so_luong_toi_da > 0 
                   ? Math.round((event.so_ve_da_dat / event.so_luong_toi_da) * 100) 
@@ -276,13 +306,18 @@ export default function HomePage() {
                         backgroundPosition: 'center',
                         backgroundRepeat: 'no-repeat'
                       }}>
-                      <div className="absolute top-3 left-3 flex gap-2">
+                      <div className="absolute top-3 left-3 flex flex-wrap gap-2">
                         <span className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded-full shadow-sm">
                           {topicName}
                         </span>
                         <span className={`px-3 py-1 text-xs font-bold rounded-full shadow-sm ${statusBadge.bg} ${statusBadge.text}`}>
                           {statusBadge.label}
                         </span>
+                        {(event.hasRegistered && !isPast) && (
+                          <span className="px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-full shadow-sm flex items-center gap-1">
+                            <Check size={12} strokeWidth={3} /> Đã đăng ký
+                          </span>
+                        )}
                       </div>
                     </div>
                     
@@ -305,13 +340,13 @@ export default function HomePage() {
                       <div className="mt-auto">
                         <div className="flex justify-between text-[11px] font-semibold text-slate-500 mb-1.5">
                           <span>{event.so_ve_da_dat} / {event.so_luong_toi_da} chỗ đã đăng ký</span>
-                          <span className={statusBadge.text}>{isFull ? '0 còn lại' : `${event.so_ve_con_lai} còn lại`}</span>
+                          <span className={statusBadge.text}>{isPast ? 'Đã kết thúc' : (isFull ? '0 còn lại' : `${event.so_ve_con_lai} còn lại`)}</span>
                         </div>
                         <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
                           <div className="h-full rounded-full transition-all" 
                             style={{ 
                               width: `${Math.min(pct, 100)}%`, 
-                              background: isFull ? '#ef4444' : pct > 80 ? '#f59e0b' : '#4f46e5' 
+                              background: isPast ? '#94a3b8' : (isFull ? '#ef4444' : pct > 80 ? '#f59e0b' : '#4f46e5') 
                             }} 
                           />
                         </div>
@@ -319,11 +354,15 @@ export default function HomePage() {
                         <button 
                           onClick={() => navigate(`/events/${event.ma_su_kien}`)}
                           className={`w-full py-2.5 rounded-xl text-sm font-bold transition-colors ${
-                            isFull 
-                              ? 'bg-slate-50 text-slate-400 cursor-not-allowed' 
-                              : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                            isPast
+                              ? 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-slate-200'
+                              : event.hasRegistered
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                : isFull 
+                                  ? 'bg-slate-50 text-slate-400 cursor-not-allowed' 
+                                  : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                           }`}>
-                          {isFull ? 'Hết chỗ' : 'Xem chi tiết'}
+                          {isPast ? 'Đã kết thúc' : (event.hasRegistered ? 'Đã đăng ký · Xem chi tiết' : (isFull ? 'Hết chỗ' : 'Xem chi tiết'))}
                         </button>
                       </div>
                     </div>

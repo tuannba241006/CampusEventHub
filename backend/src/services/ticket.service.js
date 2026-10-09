@@ -104,6 +104,7 @@ function mapTicket(ticket, now = new Date()) {
         (hasNotStarted || inCheckInWindow) &&
         eventStatus !== 'BanNhap' &&
         eventStatus !== 'DaKetThuc';
+    const isExpired = endsAt ? now >= endsAt : eventStatus === 'DaKetThuc';
     const group =
         status === 'DaDangKy' && hasNotStarted ? 'upcoming' : 'history';
 
@@ -116,6 +117,7 @@ function mapTicket(ticket, now = new Date()) {
         thoi_gian_huy: ticket.thoi_gian_huy,
         canCancel,
         canShowQr,
+        isExpired,
         group,
         su_kien: event
             ? {

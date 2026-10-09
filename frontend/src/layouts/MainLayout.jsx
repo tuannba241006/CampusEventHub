@@ -35,7 +35,7 @@ export function BottomNav({
     showCheckin !== undefined
       ? Boolean(showCheckin)
       : getStoredRole() === "NhanVienCheckIn";
-  const isStudent = getStoredRole() === "SinhVien";
+  const isStudent = getStoredRole() === "SinhVien" || getStoredRole() === "NhanVienCheckIn";
 
   const activeCls = dark
     ? "text-indigo-400"

@@ -226,10 +226,23 @@ async function loginUser(loginData) {
     throw error;
   }
 
-  // 9. Tạo JWT
+  // 9. Kiểm tra nếu SinhVien được phân công check-in thì đổi role tạm thời
+  if (user.loai_tai_khoan === "SinhVien") {
+    const { count } = await supabase
+      .from("nhan_vien_check_in")
+      .select("*", { count: "exact", head: true })
+      .eq("ma_tai_khoan", user.ma_tai_khoan)
+      .eq("da_xoa", false);
+    
+    if (count > 0) {
+      user.loai_tai_khoan = "NhanVienCheckIn";
+    }
+  }
+
+  // 10. Tạo JWT
   const accessToken = generateAccessToken(user);
 
-  // 10. Không trả password về frontend
+  // 11. Không trả password về frontend
   const safeUser = {
     ma_tai_khoan: user.ma_tai_khoan,
     mssv: user.mssv,

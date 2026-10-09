@@ -46,8 +46,14 @@ export default function EventDetailPage() {
   const isFull = event.so_ve_con_lai <= 0;
   const pct = event.so_luong_toi_da > 0 ? Math.round((event.so_ve_da_dat / event.so_luong_toi_da) * 100) : 100;
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(event.ngay_dien_ra);
+  const isPast = eventDate < today || event.trang_thai_su_kien === 'DaKetThuc';
+
   // Ticket Status Badge - Dựa trên thiết kế Figma
   const getTicketStatusBadge = () => {
+    if (isPast) return { label: 'Đã kết thúc', bg: 'bg-slate-500/80 text-white' };
     if (event.so_ve_con_lai <= 0) return { label: 'Hết chỗ', bg: 'bg-rose-500/80 text-white' };
     if (event.so_ve_con_lai <= event.so_luong_toi_da * 0.2) return { label: 'Sắp hết', bg: 'bg-amber-500/80 text-white' };
     return { label: 'Còn chỗ', bg: 'bg-white/20 text-white backdrop-blur-sm' };
@@ -223,11 +229,11 @@ export default function EventDetailPage() {
         ) : (
           <button
             onClick={() => {
-              if (registered) {
+              if (registered && !isPast) {
                 navigate('/tickets');
                 return;
               }
-              if (isFull) return;
+              if (isFull || isPast) return;
               setRegistering(true);
               setTimeout(() => {
                 setRegistering(false);
@@ -244,15 +250,31 @@ export default function EventDetailPage() {
                 });
               }, 1000);
             }}
-            disabled={registering || (isFull && !registered)}
-            className={`w-full py-3.5 rounded-xl font-bold transition-all shadow-sm ${registered
-              ? 'bg-indigo-50 text-indigo-700'
-              : isFull
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md'
+            disabled={registering || isPast || (isFull && !registered)}
+            className={`w-full py-3.5 rounded-xl font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${
+              isPast
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                : registered
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  : isFull
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-md'
               }`}
           >
-            {registering ? 'Đang xử lý...' : (registered ? 'Xem vé của tôi' : (isFull ? 'Hết chỗ' : 'Đăng ký ngay'))}
+            {registering ? (
+              'Đang xử lý...'
+            ) : isPast ? (
+              'Đã kết thúc'
+            ) : registered ? (
+              <>
+                <Check size={18} className="text-emerald-600 stroke-[3]" />
+                Đã đăng ký
+              </>
+            ) : isFull ? (
+              'Hết chỗ'
+            ) : (
+              'Đăng ký ngay'
+            )}
           </button>
         )}
       </div>

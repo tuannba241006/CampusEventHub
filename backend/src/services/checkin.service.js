@@ -167,13 +167,19 @@ async function getAssignedEvents(
     throw error;
   }
 
-  // Nhân viên check-in:
+  // SinhVien hoặc Nhân viên check-in:
   // chỉ xem các sự kiện được phân công.
-  if (user.role === "NhanVienCheckIn") {
-    return listAssignedEventsForStaff(
-      actorId,
-      options.now
-    );
+  if (user.role === "NhanVienCheckIn" || user.role === "SinhVien") {
+    const events = await listAssignedEventsForStaff(actorId, options.now);
+    
+    // Nếu là sinh viên và không được phân công sự kiện nào thì báo lỗi không có quyền
+    if (user.role === "SinhVien" && events.length === 0) {
+      const error = new Error("Bạn không có quyền soát vé");
+      error.code = "FORBIDDEN";
+      throw error;
+    }
+    
+    return events;
   }
 
   // Ban tổ chức:
@@ -185,7 +191,7 @@ async function getAssignedEvents(
     );
   }
 
-  // SinhVien và mọi role khác không có quyền.
+  // Mọi role khác không có quyền.
   const error = new Error(
     "Bạn không có quyền soát vé"
   );
@@ -215,6 +221,48 @@ function createScanError(code, payload = null) {
   throw error;
 }
 
+async function manualCheckInJS(actorId, eventId, qrCode) {
+  // Kiểm tra sự kiện
+  const { data: event } = await supabase.from('su_kien').select('*').eq('ma_su_kien', eventId).eq('da_xoa', false).maybeSingle();
+  if (!event) createScanError('FORBIDDEN');
+  
+  if (!isCheckInWindowOpen(event)) createScanError('CHECK_IN_CLOSED');
+
+  // Lấy vé
+  const { data: ticket } = await supabase.from('dang_ky').select('*, tai_khoan(ma_tai_khoan, mssv, ho_ten, khoa)').eq('ma_qr_code', qrCode).eq('da_xoa', false).maybeSingle();
+  if (!ticket) createScanError('INVALID_TICKET');
+  if (ticket.ma_su_kien !== eventId) createScanError('WRONG_EVENT');
+  if (ticket.trang_thai_ve === 'DaHuy') createScanError('TICKET_CANCELLED');
+  if (ticket.trang_thai_ve === 'DaCheckIn') {
+     createScanError('ALREADY_CHECKED_IN', {
+        ma_dang_ky: ticket.ma_dang_ky,
+        checkedInAt: ticket.thoi_gian_check_in
+     });
+  }
+
+  // Cập nhật vé
+  const now = new Date().toISOString();
+  const { data: updatedTicket, error: updateErr } = await supabase
+     .from('dang_ky')
+     .update({ trang_thai_ve: 'DaCheckIn', thoi_gian_check_in: now })
+     .eq('ma_dang_ky', ticket.ma_dang_ky)
+     .eq('trang_thai_ve', 'DaDangKy')
+     .select('ma_dang_ky, ma_su_kien, thoi_gian_check_in, tai_khoan(ma_tai_khoan, mssv, ho_ten, khoa)')
+     .maybeSingle();
+     
+  if (updateErr || !updatedTicket) {
+      createScanError('INVALID_TICKET'); 
+  }
+  
+  return {
+    code: "CHECK_IN_SUCCESS",
+    ma_dang_ky: updatedTicket.ma_dang_ky,
+    ma_su_kien: updatedTicket.ma_su_kien,
+    student: updatedTicket.tai_khoan,
+    checkedInAt: updatedTicket.thoi_gian_check_in,
+  };
+}
+
 async function scanTicket({ actorId, eventId, qrCode }) {
   const parsedActorId = toPositiveInteger(actorId);
   const parsedEventId = toPositiveInteger(eventId);
@@ -241,6 +289,22 @@ async function scanTicket({ actorId, eventId, qrCode }) {
   }
 
   if (!payload.success) {
+    // FALLBACK: Database RPC check_in_ticket chặn cứng SinhVien (chỉ cho phép NhanVienCheckIn, ToChuc)
+    // Nếu bị FORBIDDEN, ta sẽ check thủ công xem user có nằm trong nhan_vien_check_in hay không.
+    if (payload.code === "FORBIDDEN") {
+      const { data: assignment } = await supabase
+        .from("nhan_vien_check_in")
+        .select("ma_nhan_vien")
+        .eq("ma_tai_khoan", parsedActorId)
+        .eq("ma_su_kien", parsedEventId)
+        .eq("da_xoa", false)
+        .maybeSingle();
+        
+      if (assignment) {
+        return await manualCheckInJS(parsedActorId, parsedEventId, normalizedQr);
+      }
+    }
+    
     createScanError(payload.code, payload);
   }
 

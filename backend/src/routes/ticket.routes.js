@@ -9,18 +9,18 @@ const authorizeRoles = require('../middlewares/role.middleware');
 router.get(
   '/my-tickets',
   authenticate,
-  authorizeRoles('SinhVien'),
+  authorizeRoles('SinhVien', 'NhanVienCheckIn'),
   ticketController.getMyTickets
 );
 
 // Đặt vé
-router.post('/book', authenticate, authorizeRoles('SinhVien'), ticketController.bookTicket);
+router.post('/book', authenticate, authorizeRoles('SinhVien', 'NhanVienCheckIn'), ticketController.bookTicket);
 
 // Hủy vé
 router.post(
   '/:id/cancel',
   authenticate,
-  authorizeRoles('SinhVien'),
+  authorizeRoles('SinhVien', 'NhanVienCheckIn'),
   ticketController.cancelTicket
 );
 

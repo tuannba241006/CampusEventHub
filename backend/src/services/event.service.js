@@ -38,7 +38,7 @@ const getOrganizerEventsService = async (maTaiKhoanToChuc) => {
 };
 
 // 0. Lấy danh sách sự kiện public (Gói 3)
-const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kien, ticketStatus, ngay_dien_ra, dia_diem, page = 1, limit = 9 }) => {
+const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kien, ticketStatus, ngay_dien_ra, dia_diem, page = 1, limit = 9, sortBy = 'date_asc', maTaiKhoan = null }) => {
   let query = supabase
     .from('su_kien')
     .select(`
@@ -47,8 +47,7 @@ const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kie
       dang_ky (count)
     `)
     .neq('trang_thai_su_kien', 'BanNhap')
-    .eq('da_xoa', false)
-    .order('ngay_dien_ra', { ascending: true });
+    .eq('da_xoa', false);
 
   if (keyword) {
     query = query.or(`ten_su_kien.ilike.%${keyword}%,dia_diem.ilike.%${keyword}%,dien_gia.ilike.%${keyword}%`);
@@ -66,6 +65,19 @@ const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kie
   const { data, error } = await query;
   if (error) throw error;
 
+  let registeredEventIds = new Set();
+  if (maTaiKhoan) {
+    const { data: userRegs } = await supabase
+      .from('dang_ky')
+      .select('ma_su_kien')
+      .eq('ma_tai_khoan', maTaiKhoan)
+      .neq('trang_thai_ve', 'DaHuy')
+      .eq('da_xoa', false);
+    if (userRegs) {
+      registeredEventIds = new Set(userRegs.map(r => r.ma_su_kien));
+    }
+  }
+
   let formattedData = data.map(item => {
     const computed = processEventWithStatus(item);
     const so_ve_da_dat = item.dang_ky?.[0]?.count || 0; 
@@ -74,6 +86,7 @@ const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kie
       ...computed,
       so_ve_da_dat,
       so_ve_con_lai,
+      hasRegistered: registeredEventIds.has(item.ma_su_kien),
       dang_ky: undefined
     };
   });
@@ -88,6 +101,28 @@ const getPublicEventsService = async ({ keyword, ma_chuyen_de, trang_thai_su_kie
     formattedData = formattedData.filter(e => e.so_ve_con_lai <= 0);
   } else if (ticketStatus === 'Sắp hết') {
     formattedData = formattedData.filter(e => e.so_ve_con_lai > 0 && e.so_ve_con_lai <= Math.ceil(e.so_luong_toi_da * 0.2));
+  }
+
+  if (sortBy === 'date_asc') {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    formattedData.sort((a, b) => {
+      const dateA = new Date(a.ngay_dien_ra);
+      const dateB = new Date(b.ngay_dien_ra);
+      const isPastA = dateA < now;
+      const isPastB = dateB < now;
+      if (isPastA && !isPastB) return 1;
+      if (!isPastA && isPastB) return -1;
+      return dateA - dateB;
+    });
+  } else if (sortBy === 'date_latest' || sortBy === 'date_desc') {
+    formattedData.sort((a, b) => new Date(b.ngay_dien_ra) - new Date(a.ngay_dien_ra));
+  } else if (sortBy === 'date_earliest') {
+    formattedData.sort((a, b) => new Date(a.ngay_dien_ra) - new Date(b.ngay_dien_ra));
+  } else if (sortBy === 'name_asc') {
+    formattedData.sort((a, b) => (a.ten_su_kien || '').localeCompare(b.ten_su_kien || ''));
+  } else if (sortBy === 'name_desc') {
+    formattedData.sort((a, b) => (b.ten_su_kien || '').localeCompare(a.ten_su_kien || ''));
   }
 
   const total = formattedData.length;
